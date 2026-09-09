@@ -2,8 +2,8 @@ package apis
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/go-admin-team/go-admin-core/sdk/api"
-	"github.com/go-admin-team/go-admin-core/sdk/pkg/captcha"
+	"github.com/go-admin-team/go-admin-core/v2/captcha"
+	"github.com/go-admin-team/go-admin-core/v2/sdk/api"
 )
 
 type System struct {
@@ -17,12 +17,15 @@ type System struct {
 // @Success 200 {object} response.Response{data=string,id=string,msg=string} "{"code": 200, "data": [...]}"
 // @Router /api/v1/captcha [get]
 func (e System) GenerateCaptchaHandler(c *gin.Context) {
-	err := e.MakeContext(c).Errors
-	if err != nil {
+	if err := e.MakeContext(c).Errors; err != nil {
 		e.Error(500, err, "服务初始化失败！")
 		return
 	}
-	id, b64s, err := captcha.DriverDigitFunc()
+	// The answer is deliberately discarded rather than logged. It used to be
+	// written at info level, which put a currently valid captcha answer in the
+	// application log - anyone able to read the log could bypass the check the
+	// captcha exists to enforce.
+	id, b64s, _, err := captcha.DriverDigitFunc()
 	if err != nil {
 		e.Logger.Errorf("DriverDigitFunc error, %s", err.Error())
 		e.Error(500, err, "验证码获取失败")

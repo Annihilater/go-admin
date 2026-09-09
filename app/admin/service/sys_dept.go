@@ -4,15 +4,13 @@ import (
 	"errors"
 	"go-admin/app/admin/models"
 
-	log "github.com/go-admin-team/go-admin-core/logger"
-	"github.com/go-admin-team/go-admin-core/sdk/pkg"
-
-	"gorm.io/gorm"
+	log "github.com/go-admin-team/go-admin-core/v2/logger"
+	"github.com/go-admin-team/go-admin-core/v2/sdk/pkg"
 
 	"go-admin/app/admin/service/dto"
 	cDto "go-admin/common/dto"
 
-	"github.com/go-admin-team/go-admin-core/sdk/service"
+	"github.com/go-admin-team/go-admin-core/v2/sdk/service"
 )
 
 type SysDept struct {
@@ -41,16 +39,18 @@ func (e *SysDept) Get(d *dto.SysDeptGetReq, model *models.SysDept) error {
 	var err error
 	var data models.SysDept
 
-	db := e.Orm.Model(&data).
-		First(model, d.GetId())
-	err = db.Error
-	if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
-		err = errors.New("查看对象不存在或无权查看")
+	err = e.Orm.Model(&data).
+		FirstOrInit(model, d.GetId()).
+		Error
+	if err != nil {
 		e.Log.Errorf("db error:%s", err)
+		_ = e.AddError(err)
 		return err
 	}
-	if err = db.Error; err != nil {
-		e.Log.Errorf("db error:%s", err)
+	if model.DeptId == 0 {
+		err = errors.New("查看对象不存在或无权查看")
+		e.Log.Errorf("Service GetSysApi error: %s", err)
+		_ = e.AddError(err)
 		return err
 	}
 	return nil
@@ -84,7 +84,7 @@ func (e *SysDept) Insert(c *dto.SysDeptInsertReq) error {
 	}
 	var mp = map[string]string{}
 	mp["dept_path"] = deptPath
-	if err := tx.Model(&data).Update("dept_path", deptPath).Error; err != nil {
+	if err = tx.Model(&data).Update("dept_path", deptPath).Error; err != nil {
 		e.Log.Errorf("db error:%s", err)
 		return err
 	}
@@ -183,16 +183,16 @@ func (e *SysDept) SetDeptTree(c *dto.SysDeptGetPageReq) (m []dto.DeptLabel, err 
 // Call 递归构造组织数据
 func deptTreeCall(deptList *[]models.SysDept, dept dto.DeptLabel) dto.DeptLabel {
 	list := *deptList
-	min := make([]dto.DeptLabel, 0)
+	childrenList := make([]dto.DeptLabel, 0)
 	for j := 0; j < len(list); j++ {
 		if dept.Id != list[j].ParentId {
 			continue
 		}
 		mi := dto.DeptLabel{Id: list[j].DeptId, Label: list[j].DeptName, Children: []dto.DeptLabel{}}
 		ms := deptTreeCall(deptList, mi)
-		min = append(min, ms)
+		childrenList = append(childrenList, ms)
 	}
-	dept.Children = min
+	dept.Children = childrenList
 	return dept
 }
 
@@ -212,7 +212,7 @@ func (e *SysDept) SetDeptPage(c *dto.SysDeptGetPageReq) (m []models.SysDept, err
 
 func (e *SysDept) deptPageCall(deptlist *[]models.SysDept, menu models.SysDept) models.SysDept {
 	list := *deptlist
-	min := make([]models.SysDept, 0)
+	childrenList := make([]models.SysDept, 0)
 	for j := 0; j < len(list); j++ {
 		if menu.DeptId != list[j].ParentId {
 			continue
@@ -230,9 +230,9 @@ func (e *SysDept) deptPageCall(deptlist *[]models.SysDept, menu models.SysDept) 
 		mi.CreatedAt = list[j].CreatedAt
 		mi.Children = []models.SysDept{}
 		ms := e.deptPageCall(deptlist, mi)
-		min = append(min, ms)
+		childrenList = append(childrenList, ms)
 	}
-	menu.Children = min
+	menu.Children = childrenList
 	return menu
 }
 
@@ -280,15 +280,15 @@ func (e *SysDept) SetDeptLabel() (m []dto.DeptLabel, err error) {
 func deptLabelCall(deptList *[]models.SysDept, dept dto.DeptLabel) dto.DeptLabel {
 	list := *deptList
 	var mi dto.DeptLabel
-	min := make([]dto.DeptLabel, 0)
+	childrenList := make([]dto.DeptLabel, 0)
 	for j := 0; j < len(list); j++ {
 		if dept.Id != list[j].ParentId {
 			continue
 		}
 		mi = dto.DeptLabel{Id: list[j].DeptId, Label: list[j].DeptName, Children: []dto.DeptLabel{}}
 		ms := deptLabelCall(deptList, mi)
-		min = append(min, ms)
+		childrenList = append(childrenList, ms)
 	}
-	dept.Children = min
+	dept.Children = childrenList
 	return dept
 }
